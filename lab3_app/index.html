@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ЛР3 — Базовые растровые алгоритмы</title>
+<style>
+:root{--bg:#eef1f4;--fg:#15202b;--card:#fff;--ac:#0b6e99;--mut:#5c6b78;--bd:#cfd8df;--pix:#2b7fb0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10161c;--fg:#e6edf3;--card:#18212a;--ac:#5cc4ee;--mut:#8fa0ae;--bd:#2c3945;--pix:#4aa3d6}}
+:root[data-theme="dark"]{--bg:#10161c;--fg:#e6edf3;--card:#18212a;--ac:#5cc4ee;--mut:#8fa0ae;--bd:#2c3945;--pix:#4aa3d6}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:16px}
+h1{font-size:26px;margin:6px 0 2px}h2{font-size:18px;margin:22px 0 6px}
+.sub{color:var(--mut);margin:0 0 12px}
+.bar,.card,details{background:var(--card);border:1px solid var(--bd);border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px;margin-top:8px}
+label{display:flex;gap:6px;align-items:center}
+select,input,button{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--bd);border-radius:4px;padding:5px}
+input[type=number]{width:64px}input[type=range]{accent-color:var(--ac);width:140px;padding:0}
+button{cursor:pointer}button.p{background:var(--ac);color:var(--bg);border-color:var(--ac)}
+.hint{background:var(--card);border-left:4px solid var(--ac);border-radius:4px;padding:8px 12px;margin:8px 0 0}
+.wrap{overflow:auto;margin-top:8px;padding:6px;max-height:75vh}
+canvas{display:block}
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{border:1px solid var(--bd);padding:3px 8px;text-align:right}th{background:var(--bg)}
+.scr{overflow:auto;max-height:340px;margin-top:6px}
+details{padding:8px 12px;margin-top:8px}summary{cursor:pointer;font-weight:600}
+code{background:var(--bg);padding:1px 4px;border-radius:3px}.hide{display:none}
+</style></head><body><main>
+<h1>Лабораторная работа 3. Базовые растровые алгоритмы</h1>
+<p class="sub">Пошаговый алгоритм · ЦДА · Брезенхем (отрезок) · Брезенхем (окружность) · сглаженная линия (Ву)</p>
+<div class="bar">
+ <label>Алгоритм <select id="alg"></select></label>
+ <span id="gl"><label>x₀<input type="number" id="x0" value="2"></label><label>y₀<input type="number" id="y0" value="1"></label><label>x₁<input type="number" id="x1" value="11"></label><label>y₁<input type="number" id="y1" value="6"></label></span>
+ <span id="gc" class="hide"><label>xc<input type="number" id="xc" value="0"></label><label>yc<input type="number" id="yc" value="0"></label><label>R<input type="number" id="R" value="7" min="1"></label></span>
+ <button class="p" id="go">Построить</button>
+</div>
+<div class="bar">
+ <label>Масштаб (px на клетку) <input type="range" id="zoom" min="6" max="60" value="30"><b id="zv"></b></label>
+ <label><input type="checkbox" id="auto" checked> авто-масштаб</label>
+ <label><input type="checkbox" id="ideal" checked> идеальная линия</label>
+</div>
+<p class="hint" id="info"></p>
+<div class="card wrap" id="wrap"><canvas id="cv"></canvas></div>
+<h2>Расчёт по шагам</h2>
+<div class="card" style="padding:8px"><div id="cap" class="sub"></div><div class="scr"><table id="tb"></table></div></div>
+<h2>Время работы</h2>
+<div class="bar"><button id="b1">Замерить выбранный алгоритм</button><button id="b2">Сравнить все (отрезок 1000×600, окружность R=500)</button><span id="bo"></span></div>
+<div id="bt"></div>
+<details open><summary>Как целочисленные координаты привязаны к сетке</summary>
+<p>Пиксель с координатами (x, y) — это клетка сетки, <b>центр которой</b> лежит в точке (x, y). Клетка занимает область [x−½, x+½] × [y−½, y+½], поэтому линии сетки проходят через полуцелые значения, а подписи на осях стоят по центрам клеток. Начало координат (0, 0) — центр клетки; ось Y направлена вверх (как в математике), на экране строка вычисляется как <code>(ymax − y)·масштаб</code>. Красная тонкая линия или окружность — идеальная (непрерывная) фигура; закрашенные клетки — её растровое приближение.</p></details>
+<script>
+/* Базовые растровые алгоритмы. plot(x,y[,a]) — вывод пикселя; rec — массив для записи строк расчёта (или null). */
+const rnd = v => Math.floor(v + 0.5 + 1e-9);          // округление «половина вверх» с защитой от ошибки float
+
+/* 1. Пошаговый алгоритм: y = k·x + b, шаг по большей проекции */
+function stepLine(x0, y0, x1, y1, plot, rec) {
+  const dx = x1 - x0, dy = y1 - y0;
+  if (dx === 0 && dy === 0) { plot(x0, y0); rec && rec.push([0, x0, y0, x0, y0]); return; }
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const k = dy / dx, b = y0 - k * x0, s = dx > 0 ? 1 : -1;
+    for (let x = x0, i = 0; x !== x1 + s; x += s, i++) { const y = k * x + b, r = rnd(y); plot(x, r); rec && rec.push([i, x, y, x, r]); }
+  } else {
+    const k = dx / dy, b = x0 - k * y0, s = dy > 0 ? 1 : -1;
+    for (let y = y0, i = 0; y !== y1 + s; y += s, i++) { const x = k * y + b, r = rnd(x); plot(r, y); rec && rec.push([i, x, y, r, y]); }
+  }
+}
+/* 2. ЦДА: приращения sx, sy за L = max(|dx|,|dy|) шагов */
+function dda(x0, y0, x1, y1, plot, rec) {
+  const dx = x1 - x0, dy = y1 - y0, L = Math.max(Math.abs(dx), Math.abs(dy));
+  if (L === 0) { plot(x0, y0); rec && rec.push([0, x0, y0, x0, y0]); return; }
+  const sx = dx / L, sy = dy / L; let x = x0, y = y0;
+  for (let i = 0; i <= L; i++) { const rx = rnd(x), ry = rnd(y); plot(rx, ry); rec && rec.push([i, x, y, rx, ry]); x += sx; y += sy; }
+}
+/* 3. Брезенхем (отрезок), целочисленный, все октанты: d = 2·dy − dx */
+function bres(x0, y0, x1, y1, plot, rec) {
+  const steep = Math.abs(y1 - y0) > Math.abs(x1 - x0);
+  if (steep) { [x0, y0] = [y0, x0]; [x1, y1] = [y1, x1]; }
+  if (x0 > x1) { [x0, x1] = [x1, x0]; [y0, y1] = [y1, y0]; }
+  const dx = x1 - x0, dy = Math.abs(y1 - y0), ys = y0 < y1 ? 1 : -1; let d = 2 * dy - dx, y = y0;
+  for (let x = x0, i = 0; x <= x1; x++, i++) {
+    const px = steep ? y : x, py = steep ? x : y; plot(px, py);
+    rec && rec.push([i, px, py, d, d > 0 ? (ys > 0 ? '+1' : '−1') : '0']);
+    if (d > 0) { y += ys; d -= 2 * dx; } d += 2 * dy;
+  }
+}
+/* 4. Брезенхем (окружность), 8-кратная симметрия: d = 3 − 2R */
+function bcirc(xc, yc, R, plot, rec) {
+  let x = 0, y = R, d = 3 - 2 * R, i = 0;
+  while (x <= y) {
+    plot(xc + x, yc + y); plot(xc + y, yc + x); plot(xc - x, yc + y); plot(xc - y, yc + x);
+    plot(xc + x, yc - y); plot(xc + y, yc - x); plot(xc - x, yc - y); plot(xc - y, yc - x);
+    rec && rec.push([i++, x, y, d, d < 0 ? 'y' : 'y−1', '(' + (xc + x) + ', ' + (yc + y) + ')']);
+    if (d < 0) d += 4 * x + 6; else { d += 4 * (x - y) + 10; y--; } x++;
+  }
+}
+/* 5 (доп.). Сглаженная линия по алгоритму Ву: два пикселя на шаг, яркость = доля покрытия */
+function wu(x0, y0, x1, y1, plot, rec) {
+  const steep = Math.abs(y1 - y0) > Math.abs(x1 - x0);
+  if (steep) { [x0, y0] = [y0, x0]; [x1, y1] = [y1, x1]; }
+  if (x0 > x1) { [x0, x1] = [x1, x0]; [y0, y1] = [y1, y0]; }
+  const dx = x1 - x0, g = dx === 0 ? 0 : (y1 - y0) / dx; let y = y0;
+  for (let x = x0; x <= x1; x++) {
+    const fl = Math.floor(y), f = y - fl, a1 = 1 - f, a2 = f;
+    if (steep) { plot(fl, x, a1); plot(fl + 1, x, a2); } else { plot(x, fl, a1); plot(x, fl + 1, a2); }
+    rec && rec.push([x, y, fl, a1, a2]); y += g;
+  }
+}
+const ALG = {
+  step: { name: 'Пошаговый алгоритм', run: stepLine, hdr: ['i', 'x (точн.)', 'y (точн.)', 'x', 'y'] },
+  dda:  { name: 'Алгоритм ЦДА', run: dda, hdr: ['i', 'x (точн.)', 'y (точн.)', 'x', 'y'] },
+  bres: { name: 'Алгоритм Брезенхема (отрезок)', run: bres, hdr: ['i', 'x', 'y', 'd', 'сдвиг по y'] },
+  circ: { name: 'Алгоритм Брезенхема (окружность)', run: bcirc, circle: 1, hdr: ['i', 'x', 'y', 'd', 'шаг по y', 'точка I окт.'] },
+  wu:   { name: 'Сглаженная линия (алгоритм Ву)', run: wu, hdr: ['x', 'y (точн.)', 'нижний y', 'I нижн.', 'I верх.'] }
+};
+/* Замер времени: среднее время одного вызова (мкс), минимум 150 мс суммарно */
+function bench(run, args, minMs = 150) {
+  let cnt = 0; const plot = () => { cnt++; };
+  for (let i = 0; i < 30; i++) run(...args, plot, null);
+  cnt = 0; let reps = 0; const t0 = performance.now(); let t;
+  do { for (let i = 0; i < 20; i++) run(...args, plot, null); reps += 20; t = performance.now() - t0; } while (t < minMs);
+  return { us: t * 1000 / reps, pixels: cnt / reps, reps };
+}
+
+
+const $=i=>document.getElementById(i);
+for(const k in ALG)$('alg').add(new Option(ALG[k].name,k));
+const INFO={step:'Пошаговый: считаем y = k·x + b, k = Δy/Δx, и округляем y в каждом столбце. Если |Δy| > |Δx|, роли x и y меняются. Плюс: просто. Минус: умножение и округление на каждом шаге.',
+dda:'ЦДА: шагов L = max(|Δx|, |Δy|); приращения sx = Δx/L, sy = Δy/L; на каждом шаге x += sx, y += sy и округление. Умножений нет, но координаты дробные.',
+bres:'Брезенхем: только целые числа. Параметр d = 2Δy − Δx; если d > 0, y сдвигается на ±1 и d −= 2Δx; на каждом шаге d += 2Δy. Для крутых линий x и y меняются местами.',
+circ:'Брезенхем для окружности: считаем одну восьмую (x от 0 до y), остальные точки по симметрии. d₀ = 3 − 2R; если d < 0: d += 4x + 6, иначе d += 4(x − y) + 10 и y уменьшается на 1.',
+wu:'Алгоритм Ву: на каждом шаге закрашиваются два соседних пикселя; их яркость пропорциональна доле, на которую идеальная линия их покрывает (1−f и f, где f — дробная часть y).'};
+const num=id=>Math.round(+$(id).value||0),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=v=>typeof v==='number'?(Number.isInteger(v)?v:v.toFixed(3)):v;
+let auto=true;
+function params(){const A=ALG[$('alg').value];return A.circle?[num('xc'),num('yc'),clamp(num('R'),1,100)]:[clamp(num('x0'),-150,150),clamp(num('y0'),-150,150),clamp(num('x1'),-150,150),clamp(num('y1'),-150,150)]}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function render(){
+ const key=$('alg').value,A=ALG[key],p=params(),pix=new Map(),rec=[];
+ A.run(...p,(x,y,a=1)=>{const k=x+','+y,o=pix.get(k);if(!o||o.a<a)pix.set(k,{x,y,a})},rec);
+ const L=[...pix.values()].filter(q=>q.a>0.005);
+ let xs=L.map(q=>q.x),ys=L.map(q=>q.y);xs.push(0);ys.push(0);
+ const xmin=Math.min(...xs)-1,xmax=Math.max(...xs)+1,ymin=Math.min(...ys)-1,ymax=Math.max(...ys)+1,cols=xmax-xmin+1,rows=ymax-ymin+1;
+ if(auto){$('zoom').value=clamp(Math.floor(($('wrap').clientWidth-70)/cols),6,60)}
+ const c=+$('zoom').value;$('zv').textContent=c;
+ const LM=38,TM=10,BM=26,cv=$('cv');cv.width=LM+cols*c+10;cv.height=TM+rows*c+BM;const g=cv.getContext('2d');
+ const X=x=>LM+(x-xmin)*c,Y=y=>TM+(ymax-y)*c,fg=css('--fg'),bd=css('--bd'),pc=css('--pix');
+ g.clearRect(0,0,cv.width,cv.height);
+ for(const q of L){g.globalAlpha=key=='wu'?0.12+0.88*q.a:1;g.fillStyle=pc;g.fillRect(X(q.x),Y(q.y),c,c)}g.globalAlpha=1;
+ g.strokeStyle=bd;g.lineWidth=1;g.beginPath();
+ for(let i=0;i<=cols;i++){g.moveTo(LM+i*c+.5,TM);g.lineTo(LM+i*c+.5,TM+rows*c)}
+ for(let j=0;j<=rows;j++){g.moveTo(LM,TM+j*c+.5);g.lineTo(LM+cols*c,TM+j*c+.5)}g.stroke();
+ g.strokeStyle=fg;g.lineWidth=2;g.beginPath();g.moveTo(LM,Y(0)+c/2);g.lineTo(LM+cols*c,Y(0)+c/2);g.moveTo(X(0)+c/2,TM);g.lineTo(X(0)+c/2,TM+rows*c);g.stroke();
+ g.fillStyle=fg;g.font='12px system-ui,sans-serif';g.textAlign='center';const st=Math.max(1,Math.ceil(26/c));
+ for(let x=xmin;x<=xmax;x++)if(x%st==0)g.fillText(x,X(x)+c/2,TM+rows*c+15);
+ g.textAlign='right';for(let y=ymin;y<=ymax;y++)if(y%st==0)g.fillText(y,LM-5,Y(y)+c/2+4);
+ g.textAlign='left';g.font='bold 13px system-ui,sans-serif';g.fillText('x →',LM+cols*c-26,Y(0)+c/2-6);g.fillText('y ↑',X(0)+c/2+5,TM+12);
+ if(key=='wu'&&c>=30){g.font='11px system-ui,sans-serif';g.textAlign='center';for(const q of L){g.fillStyle=q.a>.55?'#fff':fg;g.fillText(q.a.toFixed(2),X(q.x)+c/2,Y(q.y)+c/2+4)}}
+ if($('ideal').checked){g.strokeStyle='#e03131';g.lineWidth=1.6;g.beginPath();
+  if(A.circle)g.arc(X(p[0])+c/2,Y(p[1])+c/2,p[2]*c,0,6.2832);else{g.moveTo(X(p[0])+c/2,Y(p[1])+c/2);g.lineTo(X(p[2])+c/2,Y(p[3])+c/2)}g.stroke()}
+ $('info').textContent=INFO[key];
+ const T=$('tb');T.innerHTML='<tr>'+A.hdr.map(h=>'<th>'+h+'</th>').join('')+'</tr>'+rec.slice(0,400).map(r=>'<tr>'+r.map(v=>'<td>'+fmt(v)+'</td>').join('')+'</tr>').join('');
+ $('cap').textContent=(A.circle?`Центр (${p[0]}, ${p[1]}), R = ${p[2]}`:`A(${p[0]}, ${p[1]}) → B(${p[2]}, ${p[3]}), Δx = ${p[2]-p[0]}, Δy = ${p[3]-p[1]}`)+`; шагов: ${rec.length}, пикселей: ${L.length}`+(rec.length>400?' (показаны первые 400 строк)':'');
+}
+function swap(){const c=ALG[$('alg').value].circle;$('gl').classList.toggle('hide',!!c);$('gc').classList.toggle('hide',!c);render()}
+$('alg').onchange=swap;$('go').onclick=render;$('zoom').oninput=()=>{auto=false;$('auto').checked=false;render()};
+$('auto').onchange=()=>{auto=$('auto').checked;render()};$('ideal').onchange=render;
+['x0','y0','x1','y1','xc','yc','R'].forEach(i=>$(i).onchange=render);window.onresize=()=>auto&&render();
+$('b1').onclick=()=>{const A=ALG[$('alg').value],r=bench(A.run,params());$('bo').textContent=`${A.name}: ${r.us.toFixed(3)} мкс на вызов (${r.pixels.toFixed(0)} пикселей, ${r.reps} повторов)`};
+$('b2').onclick=()=>{let h='<div class="card" style="padding:8px;margin-top:8px"><table><tr><th>Алгоритм</th><th>Фигура</th><th>мкс/вызов</th><th>пикселей</th></tr>';
+ for(const k in ALG){const A=ALG[k],a=A.circle?[0,0,500]:[0,0,1000,600],r=bench(A.run,a,100);h+=`<tr><td style="text-align:left">${A.name}</td><td>${A.circle?'R=500':'1000×600'}</td><td>${r.us.toFixed(2)}</td><td>${r.pixels.toFixed(0)}</td></tr>`}
+ $('bt').innerHTML=h+'</table></div>'};
+swap();
+</script></main></body></html>
