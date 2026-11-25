@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ЛР4 — Отсечение отрезков</title>
+<style>
+:root{--bg:#eef1f4;--fg:#15202b;--card:#fff;--ac:#0b6e99;--mut:#5c6b78;--bd:#cfd8df;--win:#1f6feb;--src:#e8590c;--vis:#2b9a44;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10161c;--fg:#e6edf3;--card:#18212a;--ac:#5cc4ee;--mut:#8fa0ae;--bd:#2c3945;--win:#58a6ff;--src:#ff922b;--vis:#51cf66}}
+:root[data-theme="dark"]{--bg:#10161c;--fg:#e6edf3;--card:#18212a;--ac:#5cc4ee;--mut:#8fa0ae;--bd:#2c3945;--win:#58a6ff;--src:#ff922b;--vis:#51cf66}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1040px;margin:0 auto;padding:16px}
+h1{font-size:26px;margin:6px 0 2px}h2{font-size:18px;margin:22px 0 6px}.sub{color:var(--mut);margin:0 0 12px}
+.bar,.card,details{background:var(--card);border:1px solid var(--bd);border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px;margin-top:8px}
+label{display:flex;gap:6px;align-items:center}
+select,input,button,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--bd);border-radius:4px;padding:5px}
+input[type=range]{accent-color:var(--ac);width:130px;padding:0}input[type=number]{width:72px}button{cursor:pointer}
+button.p,.tabs button[aria-selected=true]{background:var(--ac);color:var(--bg);border-color:var(--ac)}
+textarea{width:100%;box-sizing:border-box;height:190px;font:13px/1.4 ui-monospace,Consolas,monospace}
+.hint{background:var(--card);border-left:4px solid var(--ac);border-radius:4px;padding:8px 12px;margin:8px 0 0}
+.err{border-left-color:#e03131;color:#e03131}
+.row{display:grid;grid-template-columns:minmax(220px,1fr) 3fr;gap:12px;margin-top:8px}@media(max-width:760px){.row{grid-template-columns:1fr}}
+.wrap{overflow:auto;padding:6px;max-height:75vh}canvas{display:block}
+.lg{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut)}.lg i{display:inline-block;width:22px;height:0;border-top:3px solid;vertical-align:middle;margin-right:5px}
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}th,td{border:1px solid var(--bd);padding:3px 8px;text-align:right;white-space:nowrap}th{background:var(--bg)}td.l{text-align:left}
+.scr{overflow:auto;max-height:340px;margin-top:6px}details{padding:8px 12px;margin-top:8px}summary{cursor:pointer;font-weight:600}code{background:var(--bg);padding:1px 4px;border-radius:3px}
+</style></head><body><main>
+<h1>Лабораторная работа 4. Отсечение отрезков</h1>
+<p class="sub">Часть 1: алгоритм средней точки (прямоугольное окно) · Часть 2: отсечение отрезков выпуклым многоугольником (Кирус — Бек)</p>
+<div class="bar tabs"><button id="t1" aria-selected="true">Часть 1. Алгоритм средней точки</button><button id="t2" aria-selected="false">Часть 2. Выпуклый многоугольник</button></div>
+<div class="row">
+ <div class="card" style="padding:8px"><b>Входные данные</b>
+  <textarea id="inp" spellcheck="false"></textarea>
+  <div class="bar" style="border:0;box-shadow:none;padding:6px 0 0"><button class="p" id="go">Выполнить отсечение</button><button id="smp">Пример</button><button id="rnd">Случайные</button><label><input type="file" id="file" accept=".txt,text/plain" style="max-width:200px"></label></div>
+  <label style="margin-top:6px" id="el">ε <input type="number" id="eps" value="0.01" step="0.001" min="0.0001"></label>
+  <details><summary>Формат файла</summary><pre style="font-size:12px;margin:6px 0 0">n
+x1 y1 x2 y2   (n строк)
+Xmin Ymin Xmax Ymax
+— или, для части 2, вместо окна:
+m
+x y   (m вершин)</pre><div style="font-size:13px;color:var(--mut)">Текст между звёздочками (*…*) игнорируется.</div></details></div>
+ <div><div class="card" style="padding:8px"><div class="lg"><span><i style="border-color:var(--win)"></i>отсекающее окно</span><span><i style="border-color:var(--src);border-top-style:dashed"></i>исходные отрезки</span><span><i style="border-color:var(--vis)"></i>видимые части</span></div>
+  <div class="bar" style="border:0;box-shadow:none;padding:6px 0 0"><label>Масштаб <input type="range" id="zoom" min="4" max="90" value="30"><b id="zv"></b></label><label><input type="checkbox" id="auto" checked> авто</label><label><input type="checkbox" id="lab" checked> номера</label></div>
+  <div class="wrap" id="wrap"><canvas id="cv"></canvas></div></div></div></div>
+<p class="hint" id="msg"></p>
+<h2>Результаты по отрезкам</h2><div class="card" style="padding:8px"><div class="scr"><table id="res"></table></div></div>
+<h2>Расчёт для выбранного отрезка</h2>
+<div class="bar"><label>Отрезок № <select id="sel"></select></label><span id="cap" class="sub" style="margin:0"></span></div>
+<div class="card" style="padding:8px;margin-top:8px"><div class="scr"><table id="log"></table></div></div>
+<details open><summary>Как работают алгоритмы</summary>
+<p><b>Средняя точка.</b> Для концов отрезка вычисляются 4-битные коды положения относительно окна. Если оба кода нулевые — отрезок виден целиком; если побитовое «И» кодов ≠ 0 — отрезок целиком снаружи; иначе он делится пополам в средней точке, и алгоритм рекурсивно применяется к каждой половине. Деление прекращается, когда длина части ≤ ε. Умножений и делений нет, только сложение и деление на 2, а число шагов порядка log₂(L/ε).</p>
+<p><b>Кирус — Бек.</b> Отрезок задаётся параметрически: P(t) = A + t·D, t ∈ [0; 1]. Для каждого ребра выпуклого многоугольника (обход против часовой стрелки) берётся внутренняя нормаль n; точка внутри, если n·(P(t) − Pᵢ) ≥ 0, то есть num + t·den ≥ 0, где num = n·(A − Pᵢ), den = n·D. При den &gt; 0 это «вход» (t ≥ −num/den, обновляется tE = max), при den &lt; 0 — «выход» (tL = min), при den = 0 отрезок параллелен ребру и виден только если num ≥ 0. Если tE ≤ tL, видима часть от P(tE) до P(tL).</p></details>
+<script>
+/* ЛР4. Отсечение отрезков: алгоритм средней точки (прямоугольное окно) и алгоритм Кируса — Бека (выпуклый многоугольник). */
+const L_ = 1, R_ = 2, B_ = 4, T_ = 8;
+function code(x, y, w) { return (x < w.xmin ? L_ : 0) | (x > w.xmax ? R_ : 0) | (y < w.ymin ? B_ : 0) | (y > w.ymax ? T_ : 0); }
+/* Алгоритм средней точки. Возвращает видимую часть [[x0,y0],[x1,y1]] или null; log — строки расчёта. */
+function midClip(p, q, w, eps, log) {
+  const out = []; let step = 0;
+  const rec = (a, b, depth) => {
+    const ca = code(a[0], a[1], w), cb = code(b[0], b[1], w), len = Math.hypot(b[0] - a[0], b[1] - a[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    let act;
+    if (!(ca | cb)) act = 'принять'; else if (ca & cb) act = 'отбросить';
+    else if (len <= eps) act = code(m[0], m[1], w) === 0 ? 'принять (длина ≤ ε)' : 'отбросить (длина ≤ ε)';
+    else act = 'делить в ' + '(' + m[0] + '; ' + m[1] + ')';
+    log && log.push([++step, depth, a, b, ca, cb, act]);
+    if (act.startsWith('принять')) out.push([a, b]);
+    else if (act.startsWith('делить')) { rec(a, m, depth + 1); rec(m, b, depth + 1); }
+  };
+  rec(p, q, 0);
+  if (!out.length) return null;
+  return [out[0][0], out[out.length - 1][1]];
+}
+/* Многоугольник: ориентация, выпуклость, приведение к обходу против часовой стрелки */
+function area2(P) { let s = 0; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; s += a[0] * b[1] - b[0] * a[1]; } return s; }
+function isConvex(P) {
+  if (P.length < 3) return false; let sg = 0;
+  for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], c = P[(i + 2) % P.length];
+    const z = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(z) < 1e-12) continue; const s = z > 0 ? 1 : -1; if (sg && s !== sg) return false; sg = s; }
+  return sg !== 0;
+}
+function ccw(P) { return area2(P) < 0 ? P.slice().reverse() : P.slice(); }
+/* Кирус — Бек: t ∈ [tE, tL]; внутренняя нормаль ребра PQ при обходе против часовой стрелки — n = (−(Qy−Py), Qx−Px) */
+function cyrusBeck(A, B, P, log) {
+  const D = [B[0] - A[0], B[1] - A[1]]; let tE = 0, tL = 1, ok = true;
+  for (let i = 0; i < P.length && ok; i++) {
+    const p = P[i], q = P[(i + 1) % P.length], n = [-(q[1] - p[1]), q[0] - p[0]];
+    const num = n[0] * (A[0] - p[0]) + n[1] * (A[1] - p[1]), den = n[0] * D[0] + n[1] * D[1];
+    let kind, t = null;
+    if (den === 0) { kind = num < 0 ? 'параллельно, снаружи → отброшен' : 'параллельно, внутри'; if (num < 0) ok = false; }
+    else { t = -num / den; if (den > 0) { kind = 'вход'; if (t > tE) tE = t; } else { kind = 'выход'; if (t < tL) tL = t; } if (tE > tL) { ok = false; kind += ' → tE > tL, отброшен'; } }
+    log && log.push([i + 1, '(' + p[0] + '; ' + p[1] + ')→(' + q[0] + '; ' + q[1] + ')', '(' + n[0] + '; ' + n[1] + ')', num, den, t, kind, tE, tL]);
+  }
+  if (!ok || tE > tL) return null;
+  return [[A[0] + tE * D[0], A[1] + tE * D[1]], [A[0] + tL * D[0], A[1] + tL * D[1]]];
+}
+/* Эталон для тестов: Лианг — Барски */
+function liangBarsky(A, B, w) {
+  const dx = B[0] - A[0], dy = B[1] - A[1]; let t0 = 0, t1 = 1;
+  for (const [p, q] of [[-dx, A[0] - w.xmin], [dx, w.xmax - A[0]], [-dy, A[1] - w.ymin], [dy, w.ymax - A[1]]]) {
+    if (p === 0) { if (q < 0) return null; } else { const r = q / p; if (p < 0) { if (r > t1) return null; if (r > t0) t0 = r; } else { if (r < t0) return null; if (r < t1) t1 = r; } } }
+  return [[A[0] + t0 * dx, A[1] + t0 * dy], [A[0] + t1 * dx, A[1] + t1 * dy]];
+}
+/* Разбор входного текста: n; n строк x1 y1 x2 y2; затем либо окно (4 числа), либо m и m вершин многоугольника */
+function parseInput(text) {
+  const nums = (text.replace(/\*[^*]*\*/g, ' ').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || []).map(Number);
+  if (!nums.length) throw new Error('Файл пуст');
+  const n = nums[0]; if (!Number.isInteger(n) || n < 0) throw new Error('Первое число — количество отрезков (целое ≥ 0)');
+  if (nums.length < 1 + 4 * n) throw new Error('Не хватает координат: для ' + n + ' отрезков нужно ' + 4 * n + ' чисел');
+  const segs = []; for (let i = 0; i < n; i++) { const k = 1 + 4 * i; segs.push([[nums[k], nums[k + 1]], [nums[k + 2], nums[k + 3]]]); }
+  const rest = nums.slice(1 + 4 * n); let win = null, poly = null;
+  if (rest.length === 4) { win = { xmin: Math.min(rest[0], rest[2]), ymin: Math.min(rest[1], rest[3]), xmax: Math.max(rest[0], rest[2]), ymax: Math.max(rest[1], rest[3]) }; }
+  else if (rest.length >= 7 && Number.isInteger(rest[0]) && rest.length === 1 + 2 * rest[0]) { poly = []; for (let i = 0; i < rest[0]; i++) poly.push([rest[1 + 2 * i], rest[2 + 2 * i]]); }
+  else throw new Error('После отрезков ожидается окно «Xmin Ymin Xmax Ymax» или многоугольник: число вершин m и m строк «x y» (m ≥ 3)');
+  return { segs, win, poly };
+}
+if (typeof module !== 'undefined') module.exports = { code, midClip, area2, isConvex, ccw, cyrusBeck, liangBarsky, parseInput };
+
+const $=i=>document.getElementById(i);
+const S1=`8 *число отрезков*
+6 4 12 8
+1 1 3 8
+2 5 17 6
+0 0 10 12
+11 1 17 6
+2 6 8 12
+13 10 16 5
+0 6 6 12
+4 3 14 9 *Xmin Ymin Xmax Ymax*`,S2=`7
+0 0 16 11
+6 3 12 8
+-1 6 18 4
+8 -1 8 12
+2 9 6 11
+12 0 17 8
+4 5 9 5
+5 *вершин многоугольника*
+4 2
+10 1
+14 5
+11 10
+5 9`;
+const txt={1:S1,2:S2};let mode=1,auto=true,st=null;
+const f=v=>Number.isInteger(v)?String(v):(+v.toFixed(3)).toString(),pt=p=>'('+f(p[0])+'; '+f(p[1])+')',cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function setMode(m){txt[mode]=$('inp').value;mode=m;$('inp').value=txt[m];$('t1').setAttribute('aria-selected',m==1);$('t2').setAttribute('aria-selected',m==2);$('el').style.display=m==1?'flex':'none';run()}
+function msg(t,e){$('msg').textContent=t;$('msg').classList.toggle('err',!!e)}
+function run(){
+ let d;try{d=parseInput($('inp').value)}catch(e){msg('Ошибка входных данных: '+e.message,1);return}
+ let win=null,poly=null;
+ if(mode==1){if(!d.win){msg('Для части 1 в конце файла должно быть окно «Xmin Ymin Xmax Ymax».',1);return}win=d.win}
+ else{poly=d.poly||[[d.win.xmin,d.win.ymin],[d.win.xmax,d.win.ymin],[d.win.xmax,d.win.ymax],[d.win.xmin,d.win.ymax]];
+  if(!isConvex(poly)){msg('Многоугольник не выпуклый (или вырожденный): алгоритм Кируса — Бека требует выпуклого окна.',1);return}poly=ccw(poly)}
+ const eps=Math.max(+$('eps').value||0.01,1e-6),res=d.segs.map((s,i)=>{const lg=[];const v=mode==1?midClip(s[0],s[1],win,eps,lg):cyrusBeck(s[0],s[1],poly,lg);return{s,v,lg}});
+ st={d,win,poly,res,eps};const vis=res.filter(r=>r.v).length;
+ msg(`Отрезков: ${res.length}; видимая часть есть у ${vis}, полностью отброшено ${res.length-vis}.`+(mode==2?' Вершины окна приведены к обходу против часовой стрелки.':''));
+ const cur=+$('sel').value||0;$('sel').innerHTML=res.map((_,i)=>`<option value="${i}">${i+1}</option>`).join('');$('sel').value=Math.min(cur,res.length-1);
+ table();draw();detail()}
+function table(){const {res,win,poly}=st;let h='<tr><th>№</th><th>Исходный отрезок</th><th>Результат</th><th>Видимая часть</th></tr>';
+ res.forEach((r,i)=>{const [a,b]=r.s;let k,v='—';if(!r.v)k='отброшен';else{v=pt(r.v[0])+' – '+pt(r.v[1]);const same=Math.abs(r.v[0][0]-a[0])+Math.abs(r.v[0][1]-a[1])+Math.abs(r.v[1][0]-b[0])+Math.abs(r.v[1][1]-b[1])<1e-9;k=same?'виден целиком':'обрезан'}
+ h+=`<tr><td>${i+1}</td><td class="l">${pt(a)} – ${pt(b)}</td><td class="l">${k}</td><td class="l">${v}</td></tr>`});$('res').innerHTML=h}
+function detail(){if(!st)return;const i=+$('sel').value||0,r=st.res[i];if(!r)return;let h;
+ if(mode==1){h='<tr><th>шаг</th><th>глубина</th><th>A</th><th>B</th><th>код A</th><th>код B</th><th>решение</th></tr>'+r.lg.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${pt(x[2])}</td><td>${pt(x[3])}</td><td>${(x[4]).toString(2).padStart(4,'0')}</td><td>${(x[5]).toString(2).padStart(4,'0')}</td><td class="l">${x[6]}</td></tr>`).join('');
+  $('cap').textContent='Код: биты «сверху, снизу, справа, слева» (T B R L); ε = '+st.eps}
+ else{h='<tr><th>ребро</th><th>PᵢPᵢ₊₁</th><th>нормаль n</th><th>num = n·(A−P)</th><th>den = n·D</th><th>t</th><th>тип</th><th>tE</th><th>tL</th></tr>'+r.lg.map(x=>`<tr><td>${x[0]}</td><td class="l">${x[1]}</td><td>${x[2]}</td><td>${f(x[3])}</td><td>${f(x[4])}</td><td>${x[5]==null?'—':f(x[5])}</td><td class="l">${x[6]}</td><td>${f(x[7])}</td><td>${f(x[8])}</td></tr>`).join('');
+  const D=[r.s[1][0]-r.s[0][0],r.s[1][1]-r.s[0][1]];$('cap').textContent='D = B − A = '+pt(D)}
+ $('log').innerHTML=h}
+function draw(){
+ const {d,win,poly,res}=st,xs=[0],ys=[0];
+ d.segs.forEach(s=>s.forEach(p=>{xs.push(p[0]);ys.push(p[1])}));(poly||[[win.xmin,win.ymin],[win.xmax,win.ymax]]).forEach(p=>{xs.push(p[0]);ys.push(p[1])});
+ const x0=Math.floor(Math.min(...xs))-1,x1=Math.ceil(Math.max(...xs))+1,y0=Math.floor(Math.min(...ys))-1,y1=Math.ceil(Math.max(...ys))+1,LM=40,TM=10,BM=26,RM=14;
+ if(auto)$('zoom').value=cl(Math.floor(Math.min(($('wrap').clientWidth-LM-RM-14)/(x1-x0),(520-TM-BM)/(y1-y0))),4,90);
+ const s=+$('zoom').value;$('zv').textContent=s;const cv=$('cv');cv.width=LM+(x1-x0)*s+RM;cv.height=TM+(y1-y0)*s+BM;const g=cv.getContext('2d');
+ const X=x=>LM+(x-x0)*s,Y=y=>TM+(y1-y)*s,fg=css('--fg'),bd=css('--bd');g.clearRect(0,0,cv.width,cv.height);
+ let step=1;for(const c of [1,2,5,10,20,50,100,200,500])if(c*s>=34){step=c;break;}if(step*s<34)step=1000;
+ g.lineWidth=1;g.strokeStyle=bd;g.beginPath();for(let x=Math.ceil(x0/step)*step;x<=x1;x+=step){g.moveTo(X(x)+.5,TM);g.lineTo(X(x)+.5,Y(y0))}for(let y=Math.ceil(y0/step)*step;y<=y1;y+=step){g.moveTo(LM,Y(y)+.5);g.lineTo(X(x1),Y(y)+.5)}g.stroke();
+ g.fillStyle=fg;g.font='12px system-ui,sans-serif';g.textAlign='center';for(let x=Math.ceil(x0/step)*step;x<=x1;x+=step)g.fillText(x,X(x),Y(y0)+16);g.textAlign='right';for(let y=Math.ceil(y0/step)*step;y<=y1;y+=step)g.fillText(y,LM-6,Y(y)+4);
+ g.strokeStyle=fg;g.lineWidth=1.6;g.beginPath();g.moveTo(LM,Y(0));g.lineTo(X(x1),Y(0));g.moveTo(X(0),TM);g.lineTo(X(0),Y(y0));g.stroke();
+ g.font='bold 13px system-ui,sans-serif';g.textAlign='left';g.fillText('x',X(x1)-10,Y(0)-6);g.fillText('y',X(0)+6,TM+12);
+ const win_=css('--win'),src=css('--src'),vis=css('--vis');
+ g.strokeStyle=win_;g.fillStyle=win_;g.lineWidth=2.4;g.beginPath();
+ if(poly){poly.forEach((p,i)=>i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1])));g.closePath()}else g.rect(X(win.xmin),Y(win.ymax),(win.xmax-win.xmin)*s,(win.ymax-win.ymin)*s);
+ g.globalAlpha=.08;g.fill();g.globalAlpha=1;g.stroke();
+ g.setLineDash([6,4]);g.strokeStyle=src;g.lineWidth=1.6;res.forEach(r=>{g.beginPath();g.moveTo(X(r.s[0][0]),Y(r.s[0][1]));g.lineTo(X(r.s[1][0]),Y(r.s[1][1]));g.stroke()});g.setLineDash([]);
+ g.strokeStyle=vis;g.lineWidth=4;g.lineCap='round';res.forEach(r=>{if(!r.v)return;g.beginPath();g.moveTo(X(r.v[0][0]),Y(r.v[0][1]));g.lineTo(X(r.v[1][0]),Y(r.v[1][1]));g.stroke()});g.lineCap='butt';
+ g.fillStyle=src;res.forEach(r=>r.s.forEach(p=>{g.beginPath();g.arc(X(p[0]),Y(p[1]),3,0,6.2832);g.fill()}));
+ if($('lab').checked){g.fillStyle=fg;g.font='bold 12px system-ui,sans-serif';g.textAlign='left';res.forEach((r,i)=>g.fillText(i+1,X(r.s[0][0])+5,Y(r.s[0][1])-5))}}
+function rnd(){const n=10,r=(a,b)=>Math.round(a+Math.random()*(b-a));let t=n+'\n';for(let i=0;i<n;i++)t+=`${r(-4,20)} ${r(-4,16)} ${r(-4,20)} ${r(-4,16)}\n`;
+ if(mode==1)t+='4 3 14 9';else t+='5\n4 2\n10 1\n14 5\n11 10\n5 9';$('inp').value=t;run()}
+$('t1').onclick=()=>setMode(1);$('t2').onclick=()=>setMode(2);$('go').onclick=run;$('smp').onclick=()=>{$('inp').value=mode==1?S1:S2;run()};$('rnd').onclick=rnd;
+$('sel').onchange=detail;$('eps').onchange=run;$('zoom').oninput=()=>{auto=false;$('auto').checked=false;draw()};$('auto').onchange=()=>{auto=$('auto').checked;st&&draw()};$('lab').onchange=()=>st&&draw();window.onresize=()=>auto&&st&&draw();
+$('file').onchange=e=>{const fl=e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{$('inp').value=r.result;run()};r.readAsText(fl)};
+$('inp').value=S1;run();
+</script></main></body></html>
